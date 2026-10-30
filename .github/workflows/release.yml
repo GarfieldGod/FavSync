@@ -1,0 +1,182 @@
+# 每次推 main 就构建一个自包含单文件包并发一个 Release。
+#
+# 为什么只有一个产物：
+#   托盘壳 FavSync.exe 本身就是完整形态 —— 单文件自包含，内嵌 Kestrel、Web 面板编进程序集，
+#   没有第二个可执行文件。之所以还要打成 zip，是因为 tools\ 里躺着 adb 与 7za：它们是被
+#   Process.Start 起的**子进程**，必须留在磁盘上（ExcludeFromSingleFile），exe 一个人拿不走。
+#
+# 为什么跑在 windows-latest：
+#   桌面壳是 net10.0-windows + WinForms，**只能在 Windows 上构建**（NETSDK1100）。
+#   既然必然有一台 Windows 机器，就没必要为省钱把 publish 拆到别的 runner —— 拆开只会多
+#   一次 checkout、一次 setup，还要在两个 job 之间传 60 MB 的 zip。
+#
+# 版本号：v<YYYY.MM.DD>.<run_number>。这是流水号，不是语义化版本 —— 真正的 1.0 等打 tag。
+
+name: release
+
+on:
+  push:
+    branches: [main]
+  # 手动补一次构建：改了 runner、想重发、或 CI 配置本身在调的时候用。
+  workflow_dispatch:
+
+# gh release create 要写 Releases，默认的只读 token 不够。
+permissions:
+  contents: write
+
+# 连推两次 main 时，前一次没跑完就别发版了 —— 同一时刻只允许一条发布流水线。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  release:
+    name: 构建 + 发布
+    runs-on: windows-latest
+
+    steps:
+      - name: 取源码
+        uses: actions/checkout@v4
+
+      - name: 装 .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          # 没有中央包管理，依赖声明就散在各 csproj 里，拿它们算缓存键。
+          cache: true
+          cache-dependency-path: |
+            src/**/*.csproj
+            FavSync.slnx
+
+      # publish.sh 就是本地那一套，一行没改：不为了 CI 另写一份 dotnet publish 参数，
+      # 否则"本地发得出来、CI 发不出来"这种分叉迟早出现。
+      # 显式 bash 调用：Windows 上 core.filemode=false，索引里记着 755 也不代表检出来的文件
+      # 真有执行位；直接 ./publish.sh 只能指望 MSYS 把它当可执行，换 runner 就是 Permission denied。
+      - name: 构建
+        shell: bash
+        run: bash ./publish.sh
+
+      # 这里挡的是最容易静默失效的一类回归：csproj 里漏了 ExcludeFromSingleFile。
+      # 那种情况下构建照样成功、exe 照样能双击启动、面板照样能开 —— 只是扫描手机和
+      # 冷备份会用不了（子进程在 bundle 里找不到），而发布包看起来完全正常。
+      - name: 校验产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP=publish/FavSync-win-x64.zip
+
+          if [ ! -f "$ZIP" ]; then
+            echo "没有产出 $ZIP，publish/ 里实际有：" >&2
+            ls -1 publish >&2
+            exit 1
+          fi
+          echo "zip: $(du -h "$ZIP" | cut -f1)"
+
+          # 7za 在 Windows 上列出的路径用反斜杠，统一成斜杠再比对。
+          list=$(./tools/7z/7za.exe l "$ZIP" | tr '\\' '/')
+
+          missing=0
+          for f in FavSync.exe \
+                   tools/7z/7za.exe tools/7z/License-7zip.txt \
+                   tools/adb/adb.exe tools/adb/AdbWinApi.dll tools/adb/AdbWinUsbApi.dll; do
+            # 用 case 而不是 grep：pipefail 下 grep -q 提前退出会让 printf 吃到 SIGPIPE，
+            # 整条管道被判失败 —— 命中反而报「缺少」。
+            case "$list" in
+              *"$f"*) echo "  ok   $f" ;;
+              *)      echo "  缺少 $f" >&2; missing=1 ;;
+            esac
+          done
+          [ "$missing" = 0 ] || {
+            echo "zip 内容不全 —— 多半是 csproj 的 ExcludeFromSingleFile 被删了" >&2
+            printf '%s\n' "$list" >&2
+            exit 1
+          }
+
+          # 自包含的 exe 带着整个运行时，不可能小。这条能抓住"RID 或 --self-contained
+          # 掉了"的情况：那种 exe 只有几 MB，在没装 .NET 10 的机器上双击就是一句错误框。
+          size=$(stat -c %s "$ZIP" 2>/dev/null || wc -c < "$ZIP")
+          if [ "$size" -lt 40000000 ]; then
+            echo "zip 只有 $size 字节（约 $((size / 1048576)) MB），不像是自包含单文件包" >&2
+            exit 1
+          fi
+
+      - name: 上传 zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: FavSync-win-x64
+          path: publish/FavSync-win-x64.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: 发布
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v$(date +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
+          echo "版本：$TAG"
+
+          # 重跑同一条 workflow 时 tag 已经存在，删了重发，别在重跑上失败。
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --yes --cleanup-tag
+          fi
+
+          cat > /tmp/notes.md <<'EOF'
+          ### 下载
+
+          `FavSync-win-x64.zip`（约 60 MB）—— 解压即用，**整个 zip 都要解压**。
+
+          ```
+          FavSync.exe          # 托盘壳（单文件自包含，约 147 MB）
+          tools\7z\7za.exe     # 冷备份用
+          tools\7z\License-7zip.txt
+          tools\adb\           # 自带的 adb（adb.exe + 两个 WinApi dll）
+          ```
+
+          ### 怎么用
+
+          1. 解压到任意目录，双击 `FavSync.exe`。程序常驻系统托盘，面板在 `http://localhost:8720`。
+          2. 首次运行先到**设置**页指定总库目录（建议固定盘，剩余空间要够装整个收藏夹）。
+          3. 手机开 USB 调试（或 adb over Wi-Fi / Tailscale 可达），面板上「扫描手机」。
+
+          **`tools\` 不能少。** 少了 `tools\adb\` 就扫不了手机，少了 `tools\7z\` 就做不了冷备份 ——
+          程序能启动、面板能打开，但这两块功能会失效。它们必须保持真实文件，不能被塞进 exe。
+
+          ### 构建信息
+
+          - 提交：`@@SHA@@`
+          - 分支：`@@REF@@`
+          - 触发：@@EVENT@@
+          - 包大小：`@@SIZE@@`
+          EOF
+
+          sed -i "s/@@SHA@@/${GITHUB_SHA:0:7}/; s|@@REF@@|${GITHUB_REF_NAME}|; s/@@EVENT@@/${GITHUB_EVENT_NAME}/" /tmp/notes.md
+          sed -i "s|@@SIZE@@|$(du -h publish/FavSync-win-x64.zip | cut -f1)|" /tmp/notes.md
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/notes.md \
+            "publish/FavSync-win-x64.zip"
+
+      - name: 摘要
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### FavSync 构建结果'
+            echo
+            if [ -f publish/FavSync-win-x64.zip ]; then
+              echo "| | |"
+              echo "|---|---|"
+              echo "| zip | \`$(du -h publish/FavSync-win-x64.zip | cut -f1)\` |"
+              echo "| 提交 | \`${GITHUB_SHA:0:7}\` |"
+            else
+              echo '没有产出 zip，看上面「构建」或「校验产物」步骤。'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

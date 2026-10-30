@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FavSync.Core/FavSync.Core.csproj" />
+    <Project Path="src/FavSync.Server/FavSync.Server.csproj" />
+    <Project Path="src/FavSync.Desktop/FavSync.Desktop.csproj" />
+  </Folder>
+</Solution>

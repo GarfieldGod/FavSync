@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      WinExe 而不是 Exe：双击时不该弹一个黑色控制台窗口。
+      代价是没有 Console 输出，所有诊断信息走日志文件与托盘气泡。
+    -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.2.0</Version>
+    <!-- 双击的那个东西就叫 FavSync.exe，不带 Desktop 后缀。 -->
+    <AssemblyName>FavSync</AssemblyName>
+    <RootNamespace>FavSync.Desktop</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FavSync.Server\FavSync.Server.csproj" />
+  </ItemGroup>
+
+  <!-- 发布形态：单文件（用根目录 publish.sh，它会带上 self-contained 全局属性）。
+       输出目录 = FavSync.exe + adb\ + tools\ 共 6 个文件，不再是 400 多个运行时 dll 平铺。
+       普通 build（dotnet build）不受影响，只有带 RID 的发布才生效。
+       adb / 7za 是 Process.Start 起的外部程序、需要真实路径，由 Server.csproj 里的
+       ExcludeFromSingleFile 保证它们留在磁盘而不是被塞进 bundle。
+       注意：SelfContained 不能写在这里，它必须作为命令行全局属性传入，否则 Server（Sdk.Web，
+       OutputType=Exe）会被判成"非自包含可执行文件"而报 NETSDK1150。 -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <!-- 发布目录瘦身：Server 是 Web SDK 项目，会给自己生成 runtimeconfig / deps / pdb，
+       被 ProjectReference 一起拷进发布目录。宿主实际用的是 FavSync.* 那套，这些对运行没影响
+       （已实测：删掉后二维码、SQLite、7z 子进程、页面全部正常），发布时直接丢掉。 -->
+  <Target Name="TrimPublishOutput" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                            Condition="'%(Extension)' == '.pdb'
+                                    or '%(Filename)%(Extension)' == 'mfav.runtimeconfig.json'
+                                    or '%(Filename)%(Extension)' == 'mfav.deps.json'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

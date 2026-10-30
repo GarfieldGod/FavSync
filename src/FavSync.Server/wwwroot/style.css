@@ -1,0 +1,584 @@
+:root{
+  --bg:#f6f7f9; --panel:#fff; --line:#e3e6ea; --text:#1b1f24; --muted:#6b7480;
+  --accent:#2f6fed; --accent-soft:#e8f0fe;
+  --ok:#1a7f4b; --ok-soft:#e6f5ec;
+  --warn:#9a6100; --warn-soft:#fdf3e2;
+  --bad:#b3261e; --bad-soft:#fbeae9;
+  --radius:10px;
+  --dock-h:0px;
+  --head-h:67px;   /* 顶栏高度，运行时由 app.js 实测覆盖 */
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--text);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+  display:flex; flex-direction:column;
+}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.muted{color:var(--muted)}
+.spacer{flex:1}
+
+/* ---- 顶栏 ---- */
+.top{
+  display:flex;align-items:center;gap:22px;
+  padding:12px 22px;background:var(--panel);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20;
+}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{
+  width:34px;height:34px;border-radius:9px;background:var(--accent);color:#fff;
+  display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.5px;flex:none;
+}
+.top h1{font-size:15px;margin:0;font-weight:650}
+.sub{font-size:12px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
+  max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub.editable{cursor:pointer;text-decoration:underline dotted transparent}
+.sub.editable:hover{color:var(--accent);text-decoration-color:var(--accent)}
+
+/* 导航：同步 / 库 / Bilibili */
+.nav{display:flex;gap:2px;background:#eceef1;padding:3px;border-radius:10px}
+.nav-item{
+  padding:6px 16px;border-radius:8px;font-size:13px;color:var(--muted);text-decoration:none;
+  font-weight:500;
+}
+.nav-item:hover{color:var(--text)}
+.nav-item.active{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.07)}
+
+.status{
+  font-size:12px;padding:5px 11px;border-radius:999px;background:var(--ok-soft);color:var(--ok);
+  border:1px solid #cfe9d9;white-space:nowrap;
+}
+.status.bad{background:var(--bad-soft);color:var(--bad);border-color:#f2cfcc}
+.top-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+.status.bili{background:var(--accent-soft);color:var(--accent);border-color:#d3e2fd;cursor:default}
+.status.bili.out{background:#eceef1;color:var(--muted);border-color:#dde0e5}
+
+/* ---- 主体 ---- */
+main{flex:1;overflow:auto;padding:18px 22px 26px;width:100%}
+body.dock-open main{padding-bottom:calc(var(--dock-h) + 26px)}
+.page{width:100%}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.card .k{font-size:11px;color:var(--muted);letter-spacing:.3px}
+.card .v{font-size:20px;font-weight:650;margin-top:2px;font-variant-numeric:tabular-nums}
+.card .u{font-size:11px;color:var(--muted);margin-left:2px;font-weight:400}
+/* 两行统计卡：说明行 + 第二行小卡 */
+.cards-cap{display:flex;align-items:baseline;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;margin:-6px 0 6px;font-size:11px;color:var(--muted);letter-spacing:.3px}
+.cards-cap .mono{font-size:11px}
+/* 脚注里的「仅存库中 N」「已丢失 N」：可点击跳筛选，样式要像链接但不能抢眼 */
+.cards-cap .lonly{color:var(--accent);text-decoration:underline dotted;cursor:pointer}
+.cards-cap .lonly:hover{text-decoration-style:solid}
+.cards-cap .lv-lost{color:var(--bad);font-weight:600}
+.cards-sub{grid-template-columns:repeat(auto-fit,minmax(118px,1fr));margin-bottom:16px}
+.cards-sub .card{padding:9px 12px}
+.cards-sub .card .v{font-size:16px}
+#cardsTop{margin-bottom:10px}
+
+.toolbar{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.tabs{display:flex;gap:4px;background:#eceef1;padding:3px;border-radius:9px;flex-wrap:wrap}
+.tabs button{
+  border:0;background:transparent;padding:6px 12px;border-radius:7px;font-size:13px;
+  color:var(--muted);cursor:pointer;font-family:inherit;
+}
+.tabs button.active{background:var(--panel);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06);font-weight:600}
+.actions{display:flex;gap:8px;align-items:center}
+input[type=search]{
+  width:230px;padding:7px 11px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel);font:inherit;font-size:13px;outline:none;
+}
+input[type=search]:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.btn{
+  padding:7px 14px;border:1px solid var(--line);background:var(--panel);border-radius:8px;
+  font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;
+}
+.btn:hover:not(:disabled){border-color:#c9ced6}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover:not(:disabled){background:#2861d4}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.tiny{padding:3px 9px;font-size:12px;border-radius:6px}
+select.btn{padding:0 8px;height:34px;color:inherit}
+
+.table-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{
+  position:sticky;top:0;background:#fafbfc;text-align:left;font-weight:600;font-size:12px;
+  color:var(--muted);padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+tbody td{padding:9px 12px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:#fafbfc}
+.col-check{width:34px}
+.col-owner{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.col-size,.col-q,.col-lib{white-space:nowrap;font-variant-numeric:tabular-nums}
+.title{font-weight:520;display:inline;max-width:640px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.key{font-size:11px;color:#9aa2ad;font-family:ui-monospace,Consolas,monospace;display:block}
+/* 行内"具体原因"：残片缺哪个流/差多少、内容哪个流变了、校验哪一步没过。默认截两行，title 给全文 */
+.why{
+  margin:3px 0 2px;font-size:11.5px;line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  word-break:break-word;
+}
+.why.w-warn{color:#96631a}
+.why.w-bad{color:#a13b32}
+.empty{text-align:center;color:var(--muted);padding:38px 0}
+
+.badge{font-size:11.5px;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent}
+.b-todo{background:var(--accent-soft);color:var(--accent);border-color:#d3e2fd}
+.b-synced{background:var(--ok-soft);color:var(--ok);border-color:#cfe9d9}
+.b-drift{background:var(--warn-soft);color:var(--warn);border-color:#f2e0c2}
+.b-incomplete{background:var(--warn-soft);color:var(--warn);border-color:#f2e0c2}
+.b-mismatch{background:var(--bad-soft);color:var(--bad);border-color:#f2cfcc}
+
+.dchip{
+  display:inline-block;margin-left:6px;font-size:11px;padding:1px 7px;border-radius:999px;
+  background:#fff5e5;color:var(--warn);border:1px solid #f0d9b5;white-space:nowrap;vertical-align:middle;
+}
+tr.has-drift td{background:#fffdf8}
+tr.has-drift:hover td{background:#fffaf0}
+.probe{font-size:12px;color:var(--muted)}
+.probe.unknown{color:#b9c0c9}
+
+.pv-exact{background:var(--ok-soft);color:var(--ok);border-color:#cfe9d9}
+.pv-lower{background:var(--warn-soft);color:var(--warn);border-color:#f2e0c2}
+.pv-gone{background:var(--bad-soft);color:var(--bad);border-color:#f2cfcc}
+.pv-unknown{background:#eceef1;color:var(--muted);border-color:#dde0e5}
+/* 充电视频：紫系，跟"失效（红）""仅拷贝（橙）"都区分得开 —— 稿件还在，只是没权限 */
+.pv-charge{background:#f0e9fb;color:#7a54c0;border-color:#ddd0f2}
+
+/* 原视频地址：行内小链接，点了在新标签页打开 B 站稿件页 */
+.blink{
+  margin-left:6px;font-size:11.5px;color:var(--accent);text-decoration:none;
+  border-bottom:1px dashed currentColor;white-space:nowrap;
+}
+.blink:hover{opacity:.85}
+
+/* 「仅低档」：手机内档位 → B 站能给到的最高档位 */
+.tier-cmp{
+  margin-top:3px;font-size:11px;color:var(--muted);white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.tier-cmp .arrow{color:var(--warn);font-weight:700;margin:0 2px}
+
+/* 来源选项卡上的条目数角标 */
+.tabs button .tabn{
+  margin-left:6px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;font-weight:500;
+}
+.tabs button.active .tabn{color:var(--accent)}
+/* 冲突子筛选（第二排）：只在「冲突」标签下出现，比主标签小一号 */
+.subtabs{margin-top:8px;margin-bottom:10px}
+.subtabs button{padding:5px 10px;font-size:12px}
+.lib-hint{margin-left:2px}
+
+/* ---- 卡牌网格（库页 / 收藏夹页共用） ---- */
+.lib-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));
+  gap:18px;align-items:start;
+}
+.grid-more{text-align:center;color:var(--muted);font-size:12.5px;padding:22px 0}
+
+.vcard{
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+}
+.vcard:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(20,30,50,.10);border-color:#d6dae1}
+.thumb{position:relative;aspect-ratio:16/9;background:#e9ecf0;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .shade{
+  position:absolute;inset:0;background:linear-gradient(to top,rgba(8,12,20,.62) 0%,rgba(8,12,20,.12) 32%,transparent 55%);
+}
+.thumb .ov{
+  position:absolute;bottom:8px;color:#fff;font-size:12px;font-variant-numeric:tabular-nums;
+  text-shadow:0 1px 3px rgba(0,0,0,.55);
+}
+.thumb .ov.left{left:10px}
+.thumb .ov.right{right:10px}
+.thumb .pbadge{
+  position:absolute;top:8px;left:8px;background:rgba(12,18,28,.72);color:#fff;font-size:11px;
+  padding:2px 8px;border-radius:6px;backdrop-filter:blur(2px);
+}
+.thumb .sbadge{
+  position:absolute;top:8px;right:8px;background:rgba(12,18,28,.72);color:#dbe7ff;font-size:11px;
+  padding:2px 8px;border-radius:6px;
+}
+.thumb .cbadge{
+  position:absolute;top:34px;left:8px;background:rgba(12,18,28,.72);color:#ffd9a3;font-size:11px;
+  padding:2px 8px;border-radius:6px;
+}
+.thumb .cbadge.multi{color:#8fd3ff}   /* 多P待确认：蓝系，区别于失效的橙 */
+.thumb .cbadge.charge{color:#c9a8ff}  /* 充电专属：紫系，与同步页「充电视频」徽标同色系 */
+.vtitle{
+  padding:10px 12px 0;font-size:13.5px;font-weight:560;line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  min-height:39px;
+}
+.vmeta{padding:5px 12px 11px;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vmeta{display:flex;align-items:center;gap:6px}
+.vmeta>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 卡片上的「打开文件夹」：默认淡，hover 才亮，避免抢封面注意力 */
+.folderbtn{flex:none;border:1px solid var(--line);background:transparent;color:var(--muted);
+  border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;opacity:.62;transition:opacity .15s,color .15s,border-color .15s}
+.folderbtn:hover{opacity:1;color:var(--accent);border-color:var(--accent)}
+.folderbtn:disabled{opacity:.4;cursor:default}
+/* 「删除」比文件夹按钮更淡：误点代价高，不主动吸引点击 */
+.delbtn{flex:none;border:1px solid var(--line);background:transparent;color:var(--muted);
+  border-radius:6px;padding:2px 7px;font-size:11px;cursor:pointer;opacity:.42;transition:opacity .15s,color .15s,border-color .15s}
+.delbtn:hover{opacity:1;color:var(--bad);border-color:var(--bad)}
+.delbtn:disabled{opacity:.4;cursor:default}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.danger:hover:not(:disabled){background:var(--bad);color:#fff}
+.grid-more .linkbtn{border:none;background:none;color:var(--accent);font-size:12.5px;cursor:pointer;padding:0}
+.vcard.dim{opacity:.48}
+.vcard.dim:hover{opacity:.72}
+.vcard .pick{position:absolute;top:8px;left:8px}
+.thumb .pick input{width:16px;height:16px;cursor:pointer}
+
+/* ---- Bilibili 页 ---- */
+/* 左栏"通栏"：取消 main 的内边距，让收藏夹栏直接贴住顶栏和窗口左边，
+   高度锁在视口内（内部滚动），滚动网格区时用 top:0 粘在顶栏下沿。
+   注意 main 才是滚动容器，sticky 的 top 是相对 main 的滚动视口算的——
+   之前写 top:76px 会让它整块往下掉 94px，看起来"没贴住导航栏"。 */
+body[data-page=bili] main{padding:0}
+.bili-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:0;align-items:start}
+.fav-side{
+  background:var(--panel);border-right:1px solid var(--line);
+  position:sticky;top:0;
+  height:calc(100vh - var(--head-h));
+  display:flex;flex-direction:column;overflow:hidden;
+}
+/* 收藏夹栏头部：第一行「收藏夹 (N)」，第二行当前夹的 已同步/未同步/共 */
+.fav-side-head{padding:9px 16px 8px;border-bottom:1px solid var(--line);flex:none}
+.fsh-row{display:flex;align-items:center;justify-content:space-between;font-weight:600;font-size:13px}
+.fsh-stat{
+  margin-top:3px;font-size:11.5px;font-weight:400;color:var(--muted);
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:17px;
+}
+.fsh-stat b{font-weight:650;color:var(--text)}
+.fsh-stat b.ok{color:var(--ok)}
+.fsh-stat b.todo{color:var(--accent)}
+.fsh-stat.scanning{color:var(--accent)}
+.fsh-stat.bad{color:var(--bad)}
+.fav-list{flex:1;min-height:0;overflow:auto;padding:6px}
+.fav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+.fav-item:hover{background:#f5f7fa}
+.fav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.fav-item .fv-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fav-item .fv-n{color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums;flex:none}
+.fav-item .fv-n b{color:var(--ok);font-weight:650}
+.fav-item.active .fv-n{color:inherit}
+.fav-item.active .fv-n b{color:inherit}
+.fav-item .fv-n.scanning{color:var(--accent)}
+.fav-item.active .fv-n.scanning{color:inherit}
+/* 整夹同步完成（待同步 0，失效/充电不计）：替代 N/M 角标，紧跟在夹名后面 */
+.fav-item .fv-done{flex:none;padding:0 6px;border-radius:9px;background:var(--ok-soft);color:var(--ok);
+  font-size:11px;line-height:16px;font-weight:600;white-space:nowrap}
+.fav-item.active .fv-done{background:#fff;color:var(--ok)}
+.fav-main{min-width:0;padding:18px 22px 26px}
+.fav-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.fav-toolbar strong{font-size:14px}
+/* 收藏夹页筛选条：全部 / 已同步 / 未同步 / 已失效 / 多P */
+.fav-filters{display:flex;align-items:center;gap:10px;margin:-2px 0 14px;flex-wrap:wrap}
+.fav-filters .tabs{padding:2px}
+.fav-filters .tabs button{padding:5px 11px;font-size:12.5px}
+.fav-filters #favFilterHint{font-size:12px}
+
+/* ---- 任务浮窗（跨页面） ---- */
+.taskdock{
+  position:fixed;left:0;right:0;bottom:0;background:var(--panel);
+  border-top:1px solid var(--line);box-shadow:0 -6px 22px rgba(15,25,45,.08);
+  z-index:40;padding:8px 22px 12px;max-height:70vh;display:flex;flex-direction:column;
+}
+.taskdock-head{display:flex;align-items:center;gap:10px;padding-bottom:6px}
+.taskdock-title{font-size:12.5px;font-weight:650;color:var(--muted);letter-spacing:.4px}
+.tasklist{overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+.task{border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fcfcfd}
+.task.running{background:#f8fbff;border-color:#d8e5fb}
+.task-top{display:flex;align-items:center;gap:10px;font-size:12.5px;margin-bottom:5px}
+.task-top .tlabel{font-weight:650}
+.task-top .tstate{font-size:11px;padding:1px 7px;border-radius:999px;background:#eceef1;color:var(--muted)}
+.task-top .tstate.running{background:var(--accent-soft);color:var(--accent)}
+.task-top .tstate.queued{background:#f0eef7;color:#6b5ca5}
+.task-top .tstate.done{background:var(--ok-soft);color:var(--ok)}
+.task-top .tstate.failed,.task-top .tstate.cancelled{background:var(--bad-soft);color:var(--bad)}
+.task-line{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:4px}
+.task .bar{height:6px;background:#eceef1;border-radius:3px;overflow:hidden}
+.task .bar.tight{height:4px;margin-top:5px}
+.task .fill{height:100%;width:0;background:var(--accent);transition:width .25s ease}
+.task .fill.soft{background:#7fb0f5}
+.task-cur{font-size:12px;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-cur b{color:#4a6b9e;font-weight:600}
+.task-log{margin-top:6px;font-size:11.5px;color:var(--muted)}
+.task-log summary{cursor:pointer}
+.task-log pre{max-height:120px;overflow:auto;margin:6px 0 0;background:#fafbfc;padding:8px;border-radius:6px;
+  border:1px solid var(--line);white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace}
+
+.taskpill{
+  position:fixed;right:20px;bottom:18px;z-index:41;
+  background:var(--accent);color:#fff;border:0;border-radius:999px;padding:9px 16px;
+  font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+  box-shadow:0 8px 22px rgba(47,111,237,.34);white-space:nowrap;
+}
+.taskpill:hover{background:#2861d4}
+
+/* 收起态：整条浮窗压成一行（任务：+ 总进度条 + 展开） */
+.taskdock-collapsed{display:none;align-items:center;gap:10px;padding:2px 0}
+.taskdock.collapsed .taskdock-head,
+.taskdock.collapsed .tasklist{display:none}
+.taskdock.collapsed .taskdock-collapsed{display:flex}
+.taskdock-collapsed .dockc-label{font-size:12.5px;font-weight:650;color:var(--muted);letter-spacing:.4px;flex:none}
+.taskdock-collapsed .dockc-bar{flex:1;height:7px;background:#eceef1;border-radius:4px;overflow:hidden;min-width:120px}
+.taskdock-collapsed .dockc-fill{height:100%;width:0;background:var(--accent);transition:width .3s ease}
+/* 百分比后面可能跟着 ETA（"42% · 剩 3min"），给足宽度免得进度条跟着抖 */
+.taskdock-collapsed .dockc-pct{flex:none;min-width:104px;text-align:right;white-space:nowrap}
+
+/* ---- 页内播放器 ---- */
+.pmodal{
+  position:fixed;inset:0;background:rgba(8,11,16,.80);z-index:70;
+  display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.pbox{
+  width:min(1500px,100%);max-height:100%;display:flex;flex-direction:column;
+  background:#12161d;border:1px solid #232a35;border-radius:14px;overflow:hidden;
+  box-shadow:0 24px 70px rgba(0,0,0,.5);
+}
+.phead{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #232a35;flex:none}
+.ptexts{min-width:0}
+.ptitle{
+  font-size:13.5px;font-weight:600;color:#e9eef6;line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70ch;
+}
+.pmeta{font-size:11.5px;color:#8b95a5;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pbox .btn{background:#1b212b;border-color:#2c3442;color:#dfe6f0}
+.pbox .btn:hover:not(:disabled){border-color:#46515f;background:#222a35}
+.pbox .btn:disabled{opacity:.35}
+.pstage{position:relative;background:#000;flex:1;min-height:0;display:grid;place-items:center}
+.pstage video{
+  width:100%;height:100%;max-height:calc(100vh - 150px);display:block;background:#000;
+  object-fit:contain;          /* 竖屏/超宽都按原比例，绝不拉伸 */
+}
+.pover{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;background:rgba(6,9,14,.92);color:#dce4ef;font-size:13px;text-align:center;padding:24px;
+}
+.pspin{
+  width:26px;height:26px;border:2.5px solid #2d3542;border-top-color:#4d8bf0;border-radius:50%;
+  animation:pspin .9s linear infinite;
+}
+@keyframes pspin{to{transform:rotate(360deg)}}
+.pover-sub{font-size:11.5px;color:#7f8a9b;max-width:460px;line-height:1.7}
+.pover.bad #pOverText{color:#ff9b93}
+.pover.bad .pspin{display:none}
+.pover .play-big{
+  margin-top:4px;padding:9px 24px;font-size:13.5px;font-weight:600;
+  background:var(--accent);border-color:var(--accent);color:#fff;border-radius:999px;
+}
+.pover .play-big:hover{background:#2861d4;border-color:#2861d4}
+.pfoot{padding:7px 14px;border-top:1px solid #232a35;color:#808b9c;font-size:11.5px;flex:none}
+.pfoot:empty{display:none}
+
+/* 同步列表内嵌下载进度：仅"排队中/下载中"条目显示 */
+.dlprog{margin-top:4px;font-size:11px;color:var(--muted);max-width:180px}
+.dlprog .dltrack{height:4px;background:#eceef1;border-radius:2px;overflow:hidden;margin-bottom:2px}
+.dlprog .dlfill{height:100%;width:0;background:#7fb0f5;transition:width .4s ease}
+
+/* ---- 弹窗 ---- */
+.modal{
+  position:fixed;inset:0;background:rgba(15,20,28,.45);z-index:50;
+  display:grid;place-items:center;
+}
+.modal-box{
+  background:var(--panel);border-radius:14px;padding:26px 30px;text-align:center;
+  box-shadow:0 18px 50px rgba(0,0,0,.22);max-width:340px;
+}
+.modal-box h3{margin:0 0 14px;font-size:15px}
+
+/* ---- 分P选择框 ---- */
+.pm-box{max-width:780px;width:min(780px,94vw);text-align:left;padding:20px 22px;max-height:calc(100vh - 32px);overflow:hidden}
+.pm-meta{margin:-6px 0 10px;font-size:12px;color:var(--muted)}
+/* 播放器区：点某一P就在这里播，不再另开窗口；flex:none 保证视频高度固定不被压 */
+.pm-stage{margin-bottom:10px;flex:none}
+.pm-stage-bar{display:flex;align-items:center;gap:8px;margin-top:8px}
+/* 空间不够时先压缩列表（可滚动），播放区高度不动 */
+.pm-list{flex:1 1 auto;min-height:0;max-height:26vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+/* 行不再是 <label>：行首「方框+P号」整块 = 勾选下载，右侧标题区 = 预览 */
+.pm-row{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer}
+.pm-row:last-child{border-bottom:0}
+.pm-row:hover{background:#f5f7fa}
+.pm-row.playing{background:#e8f2ff}
+.pm-row.playing:hover{background:#dcebff}
+/* 勾选热区：撑满整行高度（负 margin 抵消行的上下 padding），右侧留 8px 缓冲 */
+.pm-row .pmsel{display:flex;align-items:center;gap:9px;flex:none;align-self:stretch;margin:-8px 0;padding:0 8px 0 0;border-radius:4px}
+.pm-row .pmsel:hover{background:#e4ebf4}
+.pm-row.playing .pmsel:hover{background:#d3e4fb}
+.pm-row input[type=checkbox]{width:16px;height:16px;margin:0;flex:none;accent-color:#2f7de1;cursor:pointer}
+.pm-row .pp{width:44px;flex:none;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.pm-row .pt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-row .pd{color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+/* 每P的预加载状态：缓冲好之前点它也要等一次 playurl，先说清楚 */
+.pm-row .pvst{flex:none;font-size:11px;color:var(--muted)}
+.pm-row .pvst.err{color:#b0403a}
+/* 高度写死：让视频去适应框（contain + 黑边），而不是框跟着视频比例变 —— 换 P 时面板不再跳变 */
+.pv-video{width:100%;height:clamp(240px,44vh,520px);object-fit:contain;background:#000;border-radius:10px;display:block}
+/* 已在库的P仍可在线预览（只是不用下载），所以保留 pointer */
+.pm-row.inlib{color:var(--muted)}
+.tr-box{min-width:min(720px,92vw)}
+.tr-list{max-height:48vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.tr-row{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.tr-row:last-child{border-bottom:0}
+.tr-row .pt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr-row .pd{flex:none;color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+.tr-row .tr-key{flex:none;font-size:11px;opacity:.7}
+/* 「版本重复」行尾的删除按钮：常态淡，hover 才显红——避免手滑删掉还在用的副本 */
+.tr-row .vs-del{flex:none;padding:2px 9px;font-size:11.5px;opacity:.62}
+.tr-row:hover .vs-del{opacity:1}
+.pm-foot{display:flex;gap:8px;margin-top:12px;align-items:center}
+.qr-img{width:200px;height:200px;border-radius:10px;border:1px solid var(--line);background:#fff}
+.qr-hint{margin:12px 0 6px;font-size:13px;font-weight:600}
+.qr-note{font-size:11.5px;color:var(--muted);margin-bottom:14px;line-height:1.6;text-align:left}
+/* 连接手机弹窗 */
+.ph-row{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.ph-row input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12.5px}
+.ph-devs-title{font-size:11px;color:var(--muted);letter-spacing:.3px;margin:2px 0 6px}
+.ph-devs{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px;margin-bottom:12px}
+.ph-dev{display:flex;justify-content:space-between;gap:10px;padding:6px 8px;font-size:12px;border-radius:6px}
+.ph-dev:nth-child(odd){background:var(--bg)}
+.ph-ser{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ph-state{flex:none;font-weight:600}
+.ph-state.ok{color:var(--ok)}
+.ph-state.bad{color:var(--bad)}
+
+.pager{display:flex;gap:8px;justify-content:center;margin-top:14px}
+.pager button{padding:6px 12px;border:1px solid var(--line);background:var(--panel);border-radius:7px;font:inherit;font-size:12.5px;cursor:pointer}
+.pager button:disabled{opacity:.4;cursor:default}
+/* 全选本页：和翻页按钮拉开一点距离，避免误点是"下一页" */
+.pager button.page-sel{margin-left:10px;border-style:dashed}
+
+.hidden{display:none !important}
+
+/* 窄屏：Bilibili 页左栏收到顶部、卡牌两列 */
+@media (max-width:1080px){
+  .grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .bili-layout{grid-template-columns:1fr}
+  .fav-side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .fav-list{flex:none;max-height:240px}
+  .fav-main{padding:14px 16px 22px}
+  .nav-item{padding:6px 11px}
+  .lib-hint{display:none}
+}
+@media (max-width:720px){
+  .top{flex-wrap:wrap;gap:10px}
+  main{padding:14px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+  .actions input[type=search]{width:100%}
+}
+
+/* ---- 启动告警条（总库被临时降级时出现在所有页面顶部）---- */
+.boot-banner{
+  display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:10px 14px;
+  border:1px solid #f0d8a8;background:var(--warn-soft);color:#7a4b00;
+  border-radius:var(--radius);font-size:12.5px;line-height:1.55;
+}
+.boot-banner .bb-ico{
+  flex:none;width:18px;height:18px;border-radius:50%;background:var(--warn);color:#fff;
+  display:grid;place-items:center;font-weight:700;font-size:12px;
+}
+.boot-banner .bb-text{flex:1}
+.boot-banner .bb-link{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap}
+.boot-banner .bb-link:hover{text-decoration:underline}
+
+/* ---- 设置页 ---- */
+.set-wrap{max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.set-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.set-card h3{margin:0 0 6px;font-size:14px;font-weight:650}
+.set-hint{margin:0 0 12px;color:var(--muted);font-size:12.5px;line-height:1.65}
+.set-hint code{background:#f0f2f5;padding:1px 5px;border-radius:4px;font-size:12px}
+.set-row{display:flex;gap:8px}
+.set-grid{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px 12px;align-items:center}
+.set-label{font-size:12.5px;color:var(--muted)}
+.set-input{
+  flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;
+  font:12.5px/1.4 ui-monospace,Consolas,monospace;color:var(--text);
+}
+.set-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.set-input-num{max-width:160px;flex:none}
+.set-drives{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.drive-chip{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 10px;
+  border:1px dashed var(--line);background:#fafbfc;border-radius:8px;cursor:pointer;
+  font-size:12px;color:var(--text);
+}
+.drive-chip:hover{border-color:var(--accent);background:var(--accent-soft)}
+.drive-chip .mono{color:var(--muted);font-size:11px}
+.set-note{margin-top:8px;color:var(--muted);font-size:11.5px;word-break:break-all}
+select.set-input{cursor:pointer}
+.set-fold{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;outline:none}
+.set-fold:hover,.set-fold:focus-visible{color:var(--accent)}
+.set-fold-mark{margin-left:auto;font-size:11.5px;font-weight:400;color:var(--muted)}
+.set-fold-mark::before{content:"▸ ";display:inline-block;transition:transform .15s}
+.set-fold.open .set-fold-mark::before{transform:rotate(90deg)}
+.set-inline{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer}
+.set-inline input[type=checkbox]{width:15px;height:15px;margin:0;flex:none;accent-color:#2f7de1;cursor:pointer}
+.set-checks{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.set-check{display:flex;align-items:center;gap:8px;font-size:12.5px;flex-wrap:wrap}
+.set-check .sc-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted)}
+.set-check.ok .sc-dot{background:var(--ok)}
+.set-check.bad .sc-dot{background:var(--bad)}
+.set-check.bad b{color:var(--bad)}
+.set-actions{display:flex;align-items:center;gap:10px;padding:4px 2px 10px}
+.set-msg{font-size:12.5px;color:var(--muted);max-width:62ch;line-height:1.5}
+.set-msg.ok{color:var(--ok)}
+.set-msg.warn{color:var(--warn)}
+.set-msg.bad{color:var(--bad)}
+
+/* ---- 冷备份与恢复（设置页卡片 + 弹层） ---- */
+.cold-stats{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 10px}
+.cold-stat{
+  flex:1 1 132px;min-width:132px;padding:9px 12px;border:1px solid var(--line);
+  border-radius:10px;background:#fafbfc;
+}
+.cold-stat .cs-n{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.25}
+.cold-stat .cs-l{font-size:11.5px;color:var(--muted);margin-top:2px}
+.cold-stat .cs-s{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.cold-stat.warn{border-color:#e6cf9a;background:#fdf8ec}
+.cold-stat.warn .cs-n{color:var(--warn)}
+.cold-stat.bad{border-color:#e8c2c0;background:#fdf2f1}
+.cold-stat.bad .cs-n{color:var(--bad)}
+.cold-stat.ok{border-color:#c4dfc6;background:#f2f9f2}
+.cold-stat.ok .cs-n{color:var(--ok)}
+.cold-stat.click{cursor:pointer}
+.cold-stat.click:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cold-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 6px}
+.cold-list-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;
+  padding-top:12px;border-top:1px dashed var(--line)}
+.cold-list{max-height:46vh;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.cold-row{display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12.5px;flex-wrap:wrap}
+.cold-row:last-child{border-bottom:0}
+.cold-row:hover{background:#f5f7fa}
+.cold-row .cr-id{flex:1 1 260px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:ui-monospace,Consolas,monospace;font-size:11.5px}
+.cold-row .cr-n{flex:none;color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+.cold-row .cr-sha{flex:none;color:var(--muted);font-size:11px;font-family:ui-monospace,Consolas,monospace}
+.cold-badge{flex:none;padding:1px 7px;border-radius:999px;font-size:11px;border:1px solid var(--line);background:#f1f3f6;color:var(--muted)}
+.cold-badge.packed{background:#fdf8ec;border-color:#e6cf9a;color:var(--warn)}
+.cold-badge.uploaded,.cold-badge.pruned{background:#f2f9f2;border-color:#c4dfc6;color:var(--ok)}
+.cold-badge.lost{background:#fdf2f1;border-color:#e8c2c0;color:var(--bad)}
+.cold-row .cr-ops{flex:none;display:flex;gap:6px;margin-left:auto}
+.cold-box{max-width:760px;width:min(760px,94vw);text-align:left;padding:20px 22px;
+  max-height:calc(100vh - 32px);overflow:auto}
+.cold-summary{margin:10px 0;padding:9px 12px;border:1px solid var(--line);border-radius:9px;
+  background:#fafbfc;font-size:12.5px;line-height:1.7}
+.cold-summary b{font-variant-numeric:tabular-nums}
+.cold-warn{margin:8px 0 12px;padding:9px 12px;border:1px solid #e8c2c0;border-left:3px solid var(--bad);
+  border-radius:9px;background:#fdf2f1;font-size:12px;line-height:1.65}
+.cold-check{display:flex;align-items:center;gap:8px;font-size:12.5px;margin:8px 0;cursor:pointer}
+.cold-check input{width:15px;height:15px;margin:0;accent-color:var(--accent);cursor:pointer}
+.cold-io-list{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg);margin-top:8px}
+.cold-io-row{display:flex;align-items:center;gap:9px;padding:7px 11px;border-bottom:1px solid var(--line);font-size:12.5px}
+.cold-io-row:last-child{border-bottom:0}
+.cold-io-row input{width:15px;height:15px;margin:0;flex:none;accent-color:var(--accent);cursor:pointer}
+.cold-io-row .pt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cold-io-row .pd{flex:none;color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+.cold-io-row .pd.warn{color:var(--warn)}
+.cold-io-row .pd.ok{color:var(--ok)}

@@ -1,0 +1,36 @@
+# ---- 构建产物 ----
+bin/
+obj/
+publish/
+
+# ---- 归档的历史设计稿（只留本地，不进版本库）----
+.archive/
+
+# ---- 本地运行时数据 ----
+# 总库索引/暂存区/回收站实际落在库目录下（默认 <用户盘>:\FavSyncLibrary 或设置页指定），
+# 不在仓库内；这里兜底，防止有人把库放在源码目录里误提交。
+.favsync/
+.incoming/
+.trash/
+catalog.db
+catalog.db-shm
+catalog.db-wal
+
+# ---- 本地配置（含扫码登录后的 SESSDATA 等登录态）----
+config.json
+*.wbtest
+
+# ---- IDE / 编辑器 ----
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# ---- 临时文件与备份 ----
+*.bak
+*.tmp
+*.log
+__pycache__/
+*.pyc

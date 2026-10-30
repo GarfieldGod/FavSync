@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FavSync · 手机缓存备份</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">FS</span>
+    <div>
+      <h1>FavSync</h1>
+      <div class="sub editable" id="archivePath" title="点击修改库地址（重启后生效）">—</div>
+    </div>
+  </div>
+  <nav class="nav" id="nav">
+    <a href="#/sync" class="nav-item active" data-page="sync">同步</a>
+    <a href="#/library" class="nav-item" data-page="library">库</a>
+    <a href="#/bili" class="nav-item" data-page="bili">Bilibili</a>
+    <a href="#/settings" class="nav-item" data-page="settings">设置</a>
+  </nav>
+  <div class="top-right">
+    <div class="status bili" id="biliChip">B站：检测中…</div>
+    <button class="btn" id="btnBili">登录 B 站</button>
+    <div class="status" id="statusChip" title="点击连接手机">连接中…</div>
+    <button class="btn" id="btnPhone">连接手机</button>
+  </div>
+</header>
+
+<main>
+  <!-- 启动告警条：配置的总库这次没用上（盘符不存在/只读/网络盘）时才会出现 -->
+  <div id="bootBanner" class="boot-banner hidden"></div>
+
+  <!-- ==================== 同步 ==================== -->
+  <section id="page-sync" class="page">
+    <section class="cards" id="cardsTop"></section>
+    <div class="cards-cap">
+      <span>第一行按<b>手机侧</b>口径：手机缓存条目 = 已同步 + 已升级 + 待同步；第二行四类互斥，相加 = 待同步 − 残片 − 校验失败（「有变化」是横切、「已升级」属已同步，都不另加）</span>
+      <span class="mono" id="cardsFoot"></span>
+    </div>
+    <section class="cards cards-sub" id="cardsSub"></section>
+
+    <section class="toolbar">
+      <div class="tabs" id="tabs">
+        <button data-filter="all" class="active">全部</button>
+        <button data-filter="synced">已同步</button>
+        <button data-filter="upgraded" title="库里那份画质比手机缓存高（手机存的是较低档）">已升级</button>
+        <button data-filter="libraryonly" title="手机侧已经删除、只剩总库那份的条目。它们不属于「本次扫描的手机条目」，所以不算进「已同步」">仅存库中</button>
+        <button data-filter="todo">待同步</button>
+        <button data-filter="conflict" title="库里有东西、但和手机那份对不上：有变化（换内容 / 编码不同 / 可升档）+ 校验失败 + 残片。这些要你决定留哪份，不是「还没搬」">冲突</button>
+        <button data-filter="downloadable" title="同档同编码（可 md5 逐字节校验），或 B 站能给到比手机更高的画质">可替代下载</button>
+        <button data-filter="gone">已失效</button>
+        <button data-filter="lower" title="B站给不出手机那份的同一档位，只能从手机拷贝（画质更低、同画质但编码不同，或充电视频）">仅拷贝</button>
+        <button data-filter="charge" title="充电专属视频：稿件还在，但账号没充电（或已过期），B站 playurl 回 87008 不给流 —— 属于「仅拷贝」的子集">充电</button>
+        <button data-filter="pending">待探测</button>
+      </div>
+      <div class="actions">
+        <input id="search" type="search" placeholder="搜索标题 / UP / key">
+        <button id="btnScan" class="btn">扫描手机</button>
+        <button id="btnProbe" class="btn">开始探测</button>
+        <select id="syncMode" class="btn" title="同步方式：自动 = 只有同档同编码才下载，其余从手机拷贝；仅下载 = 只下同档同编码或更高画质，同画质异编码一律跳过">
+          <option value="auto">自动选路</option>
+          <option value="copy">仅手机拷贝</option>
+          <option value="download">仅下载替代</option>
+        </select>
+        <button id="btnSync" class="btn primary" disabled>同步选中 <span id="selCount">0</span></button>
+      </div>
+    </section>
+
+    <!-- 冲突子筛选：只在「冲突」标签下出现，把"哪种不一致"分开看 -->
+    <div class="tabs subtabs hidden" id="conflictTabs">
+      <button data-filter="conflict" class="active">全部冲突</button>
+      <button data-filter="conflict-upgrade" title="手机那份比库里更好（档位更高，或同档位编码更优：HEVC/AV1 优于 AVC）—— 同步会用手机那份替换库里那份，旧副本进回收站">可升档</button>
+      <button data-filter="conflict-codec" title="同画质但编码不同（手机 HEVC / 库里 AVC），两份字节天生不同">编码不同</button>
+      <button data-filter="conflict-content" title="同档位、同编码，但字节真的变了（UP 换源 / 重新转码）">内容变了</button>
+      <button data-filter="mismatch" title="搬运/下载时文件集、大小或 md5 没过闸门 → 整条作废、一个字节都没入库">校验失败</button>
+      <button data-filter="incomplete" title="手机侧缓存本身没下完整（缺流或字节少于声明），禁止入库">残片</button>
+    </div>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="checkAll" title="全选本页（当前页可同步的条目）" aria-label="全选本页"></th>
+            <th>标题</th>
+            <th class="col-owner">UP</th>
+            <th class="col-size">手机体积</th>
+            <th class="col-q">清晰度</th>
+            <th class="col-lib">总库</th>
+            <th class="col-state">状态</th>
+            <th class="col-probe">可下载性</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="8" class="empty">还没有扫描。点右上角「扫描手机」。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="pager" id="pager"></div>
+  </section>
+
+  <!-- ==================== 库 ==================== -->
+  <section id="page-library" class="page hidden">
+    <div class="lib-toolbar">
+      <input id="libSearch" type="search" placeholder="搜索库内标题 / UP / key">
+      <span class="mono muted" id="libCount"></span>
+      <div class="spacer"></div>
+      <div class="tabs" id="libTabs">
+        <button data-source="all" class="active">全部</button>
+        <button data-source="backup">备份</button>
+        <button data-source="download">下载</button>
+        <button data-source="other">其他</button>
+      </div>
+      <button class="btn" id="btnLibScan" title="扫描总库磁盘：把已经从外部拷进来、但账目还不认识的条目认领入库。只写备份账目、不碰手机字段，可反复重跑">扫描总库</button>
+      <button class="btn" id="btnBackfill" title="早年收藏夹直下的条目，entry.json 漏写了标题/UP主ID/宽高，外部播放器扫到会显示异常。这里一次性补齐（原文会先备份）">补齐元数据</button>
+      <button class="btn" id="btnVersions" title="同一条目的额外档位副本（换主后旧主副本会移到这里），可在这里删掉不想要的">版本重复</button>
+      <button class="btn" id="btnTrash" title="被删除的条目先放在库内 .trash，清空后才真正释放空间">回收站</button>
+      <span class="mono muted lib-hint">双击卡片在页面内播放</span>
+    </div>
+    <div class="grid" id="libGrid"></div>
+    <div class="grid-more" id="libMore"></div>
+  </section>
+
+  <!-- ==================== Bilibili ==================== -->
+  <section id="page-bili" class="page hidden">
+    <div class="bili-layout">
+      <aside class="fav-side">
+        <div class="fav-side-head">
+          <div class="fsh-row">
+            <span>收藏夹</span>
+            <span class="mono muted" id="favCount"></span>
+          </div>
+          <div class="fsh-stat" id="favHeadStat">未扫描</div>
+        </div>
+        <div id="favList" class="fav-list"><div class="empty">登录后显示</div></div>
+      </aside>
+      <div class="fav-main">
+        <div class="fav-toolbar">
+          <strong id="favTitle">选择一个收藏夹</strong>
+          <span class="mono muted" id="favMeta"></span>
+          <div class="spacer"></div>
+          <button class="btn" id="btnFavScan" disabled title="整夹扫一遍，算清哪些已在总库">扫描</button>
+          <button class="btn" id="btnFavAll" disabled>全选</button>
+          <button class="btn" id="btnFavWhole" disabled title="下载整个收藏夹里未同步的视频，已在库的自动跳过">下载整夹</button>
+          <button class="btn primary" id="btnFavGo" disabled>下载所选 <span id="favSel">0</span></button>
+        </div>
+        <div class="fav-filters">
+          <div class="tabs" id="favTabs">
+            <button data-ff="all" class="active">全部<span class="tabn"></span></button>
+            <button data-ff="synced">已同步<span class="tabn"></span></button>
+            <button data-ff="unsynced">未同步<span class="tabn"></span></button>
+            <button data-ff="invalid">已失效<span class="tabn"></span></button>
+            <button data-ff="multi">多P<span class="tabn"></span></button>
+            <button data-ff="charge" title="充电专属视频：playurl 返回 87008，账号没充电（或已过期）B站不给流。下载失败时自动打标，重跑会直接跳过">充电<span class="tabn"></span></button>
+          </div>
+          <span class="mono muted" id="favFilterHint"></span>
+        </div>
+        <div class="grid" id="favGrid"><div class="empty">从左侧选一个收藏夹</div></div>
+        <div class="grid-more" id="favMore"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 设置 ==================== -->
+  <section id="page-settings" class="page hidden">
+    <div class="set-wrap">
+
+      <div class="set-card">
+        <h3>总库目录</h3>
+        <p class="set-hint">
+          备份文件放在这里。必须是<b>本地固定盘</b>：网络盘（UNC）和移动盘上 SQLite 的文件锁不可靠，会静默损坏账目。
+          改完需要重启服务才能生效（数据库路径在启动时定死）。
+        </p>
+        <div class="set-row">
+          <input id="cfgArchive" class="set-input" type="text" spellcheck="false" placeholder="例如 D:\FavSyncLibrary">
+        </div>
+        <div class="set-drives" id="cfgDrives"></div>
+        <div class="set-note mono" id="cfgArchiveNote"></div>
+      </div>
+
+      <div class="set-card">
+        <h3>手机与 adb</h3>
+        <p class="set-hint">
+          FavSync 通过 adb 读手机缓存。程序自带的 <code>tools\adb\adb.exe</code> 会被自动使用，
+          只有想用别的版本时才需要填路径（留空 = 自动查找）。
+        </p>
+        <div class="set-grid">
+          <label class="set-label">手机缓存目录</label>
+          <input id="cfgPhoneRoot" class="set-input" type="text" spellcheck="false">
+          <label class="set-label">adb 路径</label>
+          <input id="cfgAdb" class="set-input" type="text" spellcheck="false" placeholder="留空 = 自动查找（含程序自带）">
+          <label class="set-label">指定设备</label>
+          <select id="cfgDevice" class="set-input"></select>
+        </div>
+        <div class="set-note mono" id="cfgAdbNote"></div>
+        <div class="set-note" id="cfgDeviceNote"></div>
+      </div>
+
+      <div class="set-card">
+        <h3>服务端口</h3>
+        <p class="set-hint">管理页地址是 <code>http://127.0.0.1:端口</code>。被别的程序占用时改成 8730 之类即可。</p>
+        <div class="set-row">
+          <input id="cfgPort" class="set-input set-input-num" type="number" min="1024" max="65535" step="1">
+        </div>
+      </div>
+
+      <!-- ============ 高级（默认折叠） ============ -->
+      <div class="set-card">
+        <h3 class="set-fold" id="advToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="advBody">
+          高级
+          <span class="set-fold-mark" id="advMark">展开</span>
+        </h3>
+        <div id="advBody" class="hidden">
+          <p class="set-hint">
+            平时不用动：留空就按 PATH 和常见安装位置自动查找，下方「实际使用」显示的是真正生效的那个。
+          </p>
+          <div class="set-grid">
+            <label class="set-label">ffmpeg 路径</label>
+            <input id="cfgFfmpeg" class="set-input" type="text" spellcheck="false" placeholder="留空 = 自动查找（FAVSYNC_FFMPEG / PATH / C:\ffmpeg\bin）">
+            <label class="set-label">播放器路径</label>
+            <input id="cfgPlayer" class="set-input" type="text" spellcheck="false" placeholder="留空 = 自动查找（PotPlayer / mpv / VLC）">
+            <label class="set-label">B 站走代理</label>
+            <label class="set-inline">
+              <input id="cfgBiliProxy" type="checkbox">
+              <span>走系统 / 环境变量代理（<b>改完需重启服务</b>）</span>
+            </label>
+          </div>
+          <div class="set-note mono" id="cfgFfmpegNote"></div>
+          <div class="set-note mono" id="cfgPlayerNote"></div>
+          <div class="set-note" id="cfgBiliProxyNote">
+            默认关闭：实测同一条流走本机代理只有 5 MB/s、直连 24 MB/s，B 站 CDN 在国内直连才是对的。
+            只有在必须代理出境时才打开。
+          </div>
+        </div>
+      </div>
+
+      <div class="set-card">
+        <h3>运行状态</h3>
+        <div class="set-checks" id="cfgChecks"></div>
+        <div class="set-note mono" id="cfgPath"></div>
+      </div>
+
+      <!-- ============ 冷备份与恢复 ============ -->
+      <div class="set-card">
+        <h3>冷备份与恢复</h3>
+        <p class="set-hint">
+          把总库的字节打成加密分桶（7z，<b>连文件名一起加密</b>），放到网盘或移动盘上，作为第三份副本。
+          桶坏了可以从库重打，所以它真正值钱的时刻是<b>库也没了</b>的时候。
+          桶大小决定的是<b>恢复粒度</b>：2 GiB ≈ 单桶下载 5.8 小时 @100KB/s，改动只影响之后新开的桶。
+        </p>
+
+        <div class="set-grid">
+          <label class="set-label">冷备份目录</label>
+          <input id="cfgColdRoot" class="set-input" type="text" spellcheck="false" placeholder="例如 E:\FavSyncCold（可以是移动盘）">
+          <label class="set-label">桶名前缀</label>
+          <input id="cfgColdLabel" class="set-input" type="text" spellcheck="false" placeholder="cold">
+          <label class="set-label">桶大小 (MiB)</label>
+          <input id="cfgColdBucket" class="set-input set-input-num" type="number" min="64" max="8192" step="64">
+          <label class="set-label">导出机标识</label>
+          <input id="cfgColdOrigin" class="set-input set-input-num" type="text" maxlength="8" spellcheck="false" title="拼进桶名：M=本机，A=A 机。两台机器各用自己的标识 ⇒ 桶号永不冲突">
+          <label class="set-label">7z 路径</label>
+          <input id="cfgSevenZip" class="set-input" type="text" spellcheck="false" placeholder="留空 = 自动查找（含程序自带 tools\7z\7za.exe）">
+        </div>
+        <div class="set-drives" id="coldDrives"></div>
+        <div class="set-note mono" id="cfgColdNote"></div>
+        <div class="set-note mono" id="cfg7zNote"></div>
+
+        <div class="cold-stats" id="coldStats"></div>
+
+        <div class="cold-actions">
+          <button class="btn primary" id="btnColdPack">导出未冷备</button>
+          <button class="btn" id="btnColdRestore">从冷备份恢复</button>
+          <button class="btn" id="btnColdImport">导入外部桶…</button>
+          <button class="btn tiny" id="btnColdBlocked" title="账上有、盘上没有的条目：不修好就永远打不进桶">无法冷备</button>
+        </div>
+
+        <div class="cold-list-head">
+          <button class="btn tiny" id="btnColdListToggle">展开桶列表</button>
+          <div class="tabs" id="coldTabs">
+            <button data-cstate="all" class="active">全部</button>
+            <button data-cstate="packed">待上传</button>
+            <button data-cstate="uploaded">已上传</button>
+            <button data-cstate="pruned">本地已删</button>
+          </div>
+          <span class="mono muted" id="coldListMsg"></span>
+          <div class="spacer"></div>
+          <button class="btn tiny" id="coldPrev">上一页</button>
+          <button class="btn tiny" id="coldNext">下一页</button>
+        </div>
+        <div id="coldList" class="cold-list hidden"></div>
+      </div>
+
+      <div class="set-actions">
+        <span class="set-msg" id="cfgMsg"></span>
+        <div class="spacer"></div>
+        <button class="btn primary" id="btnCfgSave">保存配置</button>
+        <button class="btn" id="btnCfgRestart" disabled title="改过总库目录或端口后需要重启服务">重启服务</button>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<!-- ==================== 任务浮窗（跨页面） ==================== -->
+<div id="taskdock" class="taskdock hidden">
+  <div class="taskdock-head">
+    <span class="taskdock-title">任务</span>
+    <span class="mono muted" id="taskDockCount"></span>
+    <div class="spacer"></div>
+    <button class="btn tiny" id="btnDockCollapse">收起</button>
+    <button class="btn tiny" id="btnDockMin">最小化</button>
+    <button class="btn tiny" id="btnDockClose">关闭</button>
+  </div>
+  <!-- 收起态：一行 —— 任务： + 总进度条 + 展开 -->
+  <div class="taskdock-collapsed">
+    <span class="dockc-label">任务：</span>
+    <div class="dockc-bar"><div class="dockc-fill" id="dockcFill"></div></div>
+    <span class="mono muted dockc-pct" id="dockcPct">0%</span>
+    <button class="btn tiny" id="btnDockExpand">展开</button>
+  </div>
+  <div class="tasklist" id="taskList"></div>
+</div>
+<button id="taskPill" class="taskpill hidden">任务</button>
+
+<!-- ==================== 页内播放器 ==================== -->
+<div id="playerModal" class="pmodal hidden">
+  <div class="pbox">
+    <div class="phead">
+      <div class="ptexts">
+        <div class="ptitle" id="pTitle">—</div>
+        <div class="pmeta" id="pMeta"></div>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn tiny" id="btnPNext" disabled>下一 P</button>
+      <button class="btn tiny" id="btnPExt">外部播放器</button>
+      <button class="btn tiny" id="btnPClose">关闭</button>
+    </div>
+    <div class="pstage">
+      <video id="pVideo" controls playsinline preload="metadata"></video>
+      <div class="pover" id="pOver">
+        <div class="pspin" id="pSpin"></div>
+        <div id="pOverText">正在准备…</div>
+        <div class="pover-sub" id="pOverSub"></div>
+        <button class="btn play-big hidden" id="pPlay">▶ 开始播放</button>
+      </div>
+    </div>
+    <div class="pfoot" id="pFoot"></div>
+  </div>
+</div>
+
+<div id="loginModal" class="modal hidden">
+  <div class="modal-box">
+    <h3>登录 B 站</h3>
+    <img id="qrImg" class="qr-img" alt="B站登录二维码">
+    <div id="qrHint" class="qr-hint">生成中…</div>
+    <div class="qr-note">探测可下载性需要登录态：未登录时高档位（4K 等）会拿不到，造成"不可替代"误报。登录凭据只保存在本机 config。</div>
+    <button class="btn" id="btnQrClose">关闭</button>
+  </div>
+</div>
+
+<div id="phoneModal" class="modal hidden">
+  <div class="modal-box">
+    <h3>连接手机</h3>
+    <div class="ph-row">
+      <input id="phoneAddr" type="text" placeholder="手机IP:端口，如 192.0.2.10:5555（省略端口默认 5555）" spellcheck="false">
+      <button class="btn primary" id="btnPhoneConnect">连接</button>
+    </div>
+    <div id="phoneHint" class="qr-note">
+      方式一：手机开「设置 → 系统 → 开发者选项 → 无线调试」，连同一 Wi-Fi/同一 Tailscale 网段，输入页面上的 IP:端口（无线调试面板里显示的配对端口与连接端口不同，要用「IP 地址和端口」那行）。<br>
+      方式二：USB 插上，允许调试授权，这里直接点连接即可自动识别。
+    </div>
+    <div class="ph-devs-title">当前设备</div>
+    <div id="phoneDevs" class="ph-devs">读取中…</div>
+    <div class="ph-row">
+      <div class="spacer"></div>
+      <button class="btn" id="btnPhoneDisconnect">断开全部</button>
+      <button class="btn" id="btnPhoneClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="pagesModal" class="modal hidden">
+  <div class="modal-box pm-box">
+    <h3 id="pmTitle">选择分P</h3>
+    <div class="pm-meta" id="pmMeta"></div>
+    <div class="pm-stage">
+      <video id="pmVideo" class="pv-video" controls playsinline></video>
+      <div class="pm-stage-bar">
+        <span class="mono muted" id="pmPvStat"></span>
+        <div class="spacer"></div>
+        <button class="btn" id="btnPmAudio" title="预览默认静音（省流量、首帧更快）；打开后从当前位置接上声音">声音：关</button>
+        <select class="btn" id="pmQuality" title="预览画质：默认最低档，秒开且省流量"></select>
+      </div>
+    </div>
+    <div id="pmList" class="pm-list"></div>
+    <div class="pm-foot">
+      <span class="mono muted" id="pmSel"></span>
+      <div class="spacer"></div>
+      <button class="btn" id="btnPmAll">全选未入库</button>
+      <button class="btn" id="btnPmCancel">取消</button>
+      <button class="btn primary" id="btnPmGo" disabled>下载所选 P</button>
+    </div>
+  </div>
+</div>
+
+<div id="versionsModal" class="modal hidden">
+  <div class="modal-box tr-box">
+    <h3>版本重复</h3>
+    <div class="pm-meta" id="vsMeta"></div>
+    <div id="vsList" class="tr-list"></div>
+    <div class="pm-foot">
+      <span class="mono muted">同一条目的额外档位副本，删掉只影响这一份字节，主副本不受影响</span>
+      <div class="spacer"></div>
+      <button class="btn" id="btnVsClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="trashModal" class="modal hidden">
+  <div class="modal-box tr-box">
+    <h3>回收站</h3>
+    <div class="pm-meta" id="trMeta"></div>
+    <div id="trList" class="tr-list"></div>
+    <div class="pm-foot">
+      <span class="mono muted">删除的条目先搬进库内 .trash，清空后才真正释放空间</span>
+      <div class="spacer"></div>
+      <button class="btn danger" id="btnTrEmpty" disabled>清空回收站</button>
+      <button class="btn" id="btnTrClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="coldPackModal" class="modal hidden">
+  <div class="modal-box cold-box">
+    <h3>导出冷备份</h3>
+    <div class="cold-summary" id="coldEstimate">正在清点未冷备条目…</div>
+    <div class="set-grid">
+      <label class="set-label">压缩包密码</label>
+      <input id="coldPass" class="set-input" type="password" spellcheck="false" autocomplete="new-password" placeholder="本批所有桶共用，恢复时要原样输入">
+    </div>
+    <p class="cold-warn">
+      <b>密码丢了 = 这批桶就是一堆随机字节。</b>没有找回、没有第二把钥匙；请现在就把密码存到密码管理器或纸上。
+      A 机与本机必须用<b>同一个</b>密码，否则 A 导的桶在本机解不开。
+    </p>
+    <div class="set-grid">
+      <label class="set-label">本次最多打 (GiB)</label>
+      <input id="coldMaxGiB" class="set-input set-input-num" type="number" min="0" step="10" value="0" title="0 = 不限。填 100 就打完 100 GiB 停下，方便「打完→上传→删本地→继续」">
+      <label class="set-label">本次最多几桶</label>
+      <input id="coldMaxBuckets" class="set-input set-input-num" type="number" min="0" step="1" value="0" title="0 = 不限">
+    </div>
+    <label class="cold-check"><input type="checkbox" id="coldPassSaved"> 密码已单独保存（不勾不能开始）</label>
+    <label class="cold-check"><input type="checkbox" id="coldVerifyMd5"> 打包前算 md5 逐字节核对（最稳，但要多读一遍库 40~70 分钟）</label>
+    <div class="pm-foot">
+      <span class="mono muted" id="coldPackMsg"></span>
+      <div class="spacer"></div>
+      <button class="btn" id="btnColdPackCancel">取消</button>
+      <button class="btn primary" id="btnColdPackGo" disabled>开始打包</button>
+    </div>
+  </div>
+</div>
+
+<div id="coldIoModal" class="modal hidden">
+  <div class="modal-box cold-box">
+    <h3 id="coldIoTitle">从冷备份恢复</h3>
+    <div class="set-grid">
+      <label class="set-label">桶所在目录</label>
+      <input id="coldIoDir" class="set-input" type="text" spellcheck="false" placeholder="插上移动盘或网盘同步目录后填这里">
+      <label class="set-label">压缩包密码</label>
+      <input id="coldIoPass" class="set-input" type="password" spellcheck="false" autocomplete="off" placeholder="错密码会当场报错，不会白等一小时">
+    </div>
+    <div class="set-drives" id="coldIoDrives"></div>
+    <div class="cold-summary" id="coldIoSummary"></div>
+    <div id="coldIoList" class="cold-io-list"></div>
+    <div class="pm-foot">
+      <span class="mono muted" id="coldIoMsg"></span>
+      <div class="spacer"></div>
+      <button class="btn" id="btnColdIoClose">关闭</button>
+      <button class="btn" id="btnColdIoRead">读取清单</button>
+      <button class="btn primary" id="btnColdIoGo" disabled>开始</button>
+    </div>
+  </div>
+</div>
+
+<div id="coldBlockedModal" class="modal hidden">
+  <div class="modal-box tr-box">
+    <h3>无法冷备</h3>
+    <div class="pm-meta" id="coldBlockedMeta"></div>
+    <div id="coldBlockedList" class="tr-list"></div>
+    <div class="pm-foot">
+      <span class="mono muted">账上有、盘上没有（或字节不符）的条目，修好之后重新导出即可</span>
+      <div class="spacer"></div>
+      <button class="btn" id="btnColdBlockedClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
