@@ -55,10 +55,17 @@ tools\adb\adb.exe        # 自带的 adb（+ AdbWinApi.dll、AdbWinUsbApi.dll）
 另有 `FavSync-win-x64.zip`（约 60 MB）。解压即用，**零配置也能起**。
 `tools\` 必须和 exe 一起留着——两个工具都是被当子进程启动的，删了对应功能直接失效。
 
-推 `main` 会自动跑同一条 `./publish.sh`（`.github/workflows/release.yml`），把这个 zip 挂到
-`v<年.月.日>.<构建序>` 的 Release 上，同时留一份 workflow artifact（90 天）。
-CI 里多一道**校验产物**：解开 zip 逐个确认那 6 个文件真在包里 —— 漏写 `ExcludeFromSingleFile` 时
-构建照样成功、exe 照样能双击启动，只是扫描手机和冷备份会静默失效，得在发出去之前挡住。
+推 `main` 会自动跑同一条 `./publish.sh`（`.github/workflows/release.yml`），只留一份 workflow
+artifact（90 天），**不发 Release**。想要一个正式版本，打个 tag：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0        # 只有 v* tag 触发，tag 名即版本号
+```
+
+两种情况都会跑 CI 里那道**校验产物**：解开 zip 逐个确认那 6 个文件真在包里 —— 漏写
+`ExcludeFromSingleFile` 时构建照样成功、exe 照样能双击启动，只是扫描手机和冷备份会静默失效，
+得在发出去之前挡住。
 
 ### 首次配置
 

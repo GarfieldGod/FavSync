@@ -18,7 +18,11 @@
 *.bat       text eol=crlf
 *.ps1       text eol=crlf
 
+# shell 脚本和 workflow 一律 LF：带 CRLF 的 .sh 在 Git Bash 里报 $'\r': command not found，
+# 而 workflow 的 run 块就是被当脚本执行的，同样不能带 \r。
 *.sh        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
 
 # 二进制：不做换行/文本转换（tools/ 下的 adb、7za 是发布包必需的真实文件）
 *.exe       binary

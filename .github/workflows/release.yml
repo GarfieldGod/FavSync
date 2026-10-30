@@ -1,4 +1,13 @@
-# 每次推 main 就构建一个自包含单文件包并发一个 Release。
+# 推 main 只构建、留 artifact；打 tag 才发 Release。
+#
+#   推 main           → publish.sh → 校验 → artifact（90 天）
+#   推 v* tag         → publish.sh → 校验 → artifact + Release（tag 名就是版本号）
+#   Run workflow      → 同上，按触发时选的分支/tag 决定发不发 Release
+#
+# 为什么这么切：main 是干活的分支，一天推十次很正常；每次都在 Releases 里留一条
+# v2026.10.30.7 这种流水号，真正的版本会被淹掉。现在的语义是「想要版本，就打个 tag」：
+#   git tag v1.0.0 && git push origin v1.0.0
+# main 上的构建产物并没有丢 —— artifact 一直挂着，需要时从 Actions 页下载。
 #
 # 为什么只有一个产物：
 #   托盘壳 FavSync.exe 本身就是完整形态 —— 单文件自包含，内嵌 Kestrel、Web 面板编进程序集，
@@ -9,14 +18,14 @@
 #   桌面壳是 net10.0-windows + WinForms，**只能在 Windows 上构建**（NETSDK1100）。
 #   既然必然有一台 Windows 机器，就没必要为省钱把 publish 拆到别的 runner —— 拆开只会多
 #   一次 checkout、一次 setup，还要在两个 job 之间传 60 MB 的 zip。
-#
-# 版本号：v<YYYY.MM.DD>.<run_number>。这是流水号，不是语义化版本 —— 真正的 1.0 等打 tag。
 
 name: release
 
 on:
   push:
     branches: [main]
+    # 只认 v 开头的 tag；随手打的临时 tag 不该触发 60 MB 的构建。
+    tags: ["v*"]
   # 手动补一次构建：改了 runner、想重发、或 CI 配置本身在调的时候用。
   workflow_dispatch:
 
@@ -24,7 +33,7 @@ on:
 permissions:
   contents: write
 
-# 连推两次 main 时，前一次没跑完就别发版了 —— 同一时刻只允许一条发布流水线。
+# 同一条 ref 上连推两次时，前一次没跑完就别继续了。
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
@@ -36,7 +45,7 @@ env:
 
 jobs:
   release:
-    name: 构建 + 发布
+    name: 构建
     runs-on: windows-latest
 
     steps:
@@ -105,6 +114,8 @@ jobs:
             exit 1
           fi
 
+      # main 上的每一次构建都留一份，90 天内随时可取。打 tag 时也留 ——
+      # Release 挂的文件一旦被替换就查不到原始构建，artifact 是那条时间线。
       - name: 上传 zip
         uses: actions/upload-artifact@v4
         with:
@@ -113,18 +124,22 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      # 只有 tag 才发 Release。main 的 push 到这里就结束了。
       - name: 发布
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="v$(date +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
+          # tag 名即版本号，不再自己拼日期流水号。
+          TAG="$GITHUB_REF_NAME"
           echo "版本：$TAG"
 
-          # 重跑同一条 workflow 时 tag 已经存在，删了重发，别在重跑上失败。
+          # 重跑同一条 workflow 时 Release 已经存在：删掉 release 重发。
+          # 不带 --cleanup-tag —— tag 是你手动推上来的，删了重发反而会让它挪到别的提交上。
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release delete "$TAG" --yes --cleanup-tag
+            gh release delete "$TAG" --yes
           fi
 
           cat > /tmp/notes.md <<'EOF'
@@ -150,13 +165,12 @@ jobs:
 
           ### 构建信息
 
+          - 版本：`@@TAG@@`
           - 提交：`@@SHA@@`
-          - 分支：`@@REF@@`
-          - 触发：@@EVENT@@
           - 包大小：`@@SIZE@@`
           EOF
 
-          sed -i "s/@@SHA@@/${GITHUB_SHA:0:7}/; s|@@REF@@|${GITHUB_REF_NAME}|; s/@@EVENT@@/${GITHUB_EVENT_NAME}/" /tmp/notes.md
+          sed -i "s/@@TAG@@/$TAG/; s/@@SHA@@/${GITHUB_SHA:0:7}/" /tmp/notes.md
           sed -i "s|@@SIZE@@|$(du -h publish/FavSync-win-x64.zip | cut -f1)|" /tmp/notes.md
 
           gh release create "$TAG" \
@@ -176,6 +190,10 @@ jobs:
               echo "|---|---|"
               echo "| zip | \`$(du -h publish/FavSync-win-x64.zip | cut -f1)\` |"
               echo "| 提交 | \`${GITHUB_SHA:0:7}\` |"
+              case "$GITHUB_REF" in
+                refs/tags/*) echo "| Release | \`$GITHUB_REF_NAME\` |" ;;
+                *)           echo "| Release | 未发布（只有 tag 才发，本次是 \`$GITHUB_REF_NAME\`） |" ;;
+              esac
             else
               echo '没有产出 zip，看上面「构建」或「校验产物」步骤。'
             fi
